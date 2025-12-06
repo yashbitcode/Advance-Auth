@@ -1,7 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const healthCheckRouter = require("./routes/healthCheck.routes");
+const AuthRouter = require("./routes/auth.routes");
 const app = express();
+// const jwt = require('jsonwebtoken');
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.static("public"));
@@ -17,6 +19,18 @@ app.use(
 );
 
 app.use("/api/v1/healthcheck", healthCheckRouter);
-app.get("/", (req, res) => res.send("all good"));
+app.use("/api/v1/auth", AuthRouter);
+
+// app.get("/", async (req, res) => {
+//     const token = jwt.sign({ foo: 'dsjdsij' }, 'shhhhh', {expiresIn: "0h"});
+//     res.send(token);
+// });
+
+// app.post("/", async (req, res) => {
+//     const p = jwt.verify(req.body.token, "shhhhh");
+//     console.log(p);
+
+//     res.json(p);
+// })
 
 module.exports = app;
