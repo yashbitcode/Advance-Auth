@@ -234,13 +234,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 const resetPassword = asyncHandler(async (req, res) => {
     const { resetToken } = req.params;
-    const { password, confirmPassword } = req.body;
-
-    if (!password || !confirmPassword || password !== confirmPassword)
-        throw new ApiError(
-            400,
-            "Password and confirm password required and both should be same"
-        );
+    const { password } = req.body;
     if (!resetToken) throw new ApiError(400, "Reset token is required");
 
     const hash = crypto
@@ -296,6 +290,22 @@ const requestFogotPassword = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "Forgot password email sent"));
 });
 
+const changePassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword)
+        throw new ApiError(400, "Old password and new password required");
+
+    const user = await User.findById(req.user._id);
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+    if(!isPasswordCorrect) throw new ApiError(400, "Old password is incorrect");
+    
+    user.password = newPassword;
+    user.save({validateBeforeSave: false});
+
+    return res.status(200).json(new ApiResponse(200, "Password changed successful"));
+});
+
 module.exports = {
     register,
     login,
@@ -305,5 +315,6 @@ module.exports = {
     refreshAccessToken,
     resendVerificationEmail,
     resetPassword,
-    requestFogotPassword
+    requestFogotPassword,
+    changePassword
 };

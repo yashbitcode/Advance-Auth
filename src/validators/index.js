@@ -37,7 +37,37 @@ const userLoginValidator = () => {
     ];
 };
 
+const userPasswordValidator = () => {
+    return [
+        body("password")
+            .notEmpty()
+            .withMessage("Password is required")
+            .isStrongPassword()
+            .withMessage("Password should be strong"),
+        body("confirmPassword")
+            .notEmpty()
+            .withMessage("Confirm password is required")
+            .custom((value, {req}) => {
+                if(value !== req.body.confirmPassword) return false;
+                return true;
+            })
+            .withMessage("Password and confirm password should be same")
+    ];
+};
+
+const userForgotPasswordValidator = () => {
+    return [
+        body("email")
+            .notEmpty()
+            .withMessage("Email is required")
+            .isEmail()
+            .withMessage("Email is invalid"),
+    ];
+};
+
 module.exports = {
     userRegisterValidator,
-    userLoginValidator
+    userLoginValidator,
+    userPasswordValidator,
+    userForgotPasswordValidator
 };
