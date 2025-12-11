@@ -2,7 +2,11 @@ const User = require("../models/user.models");
 const { asyncHandler } = require("../utils/async-handler");
 const ApiResponse = require("../utils/api-response");
 const ApiError = require("../utils/api-error");
-const { sendEmail, emailVerificationMailContent } = require("../utils/mail");
+const {
+    sendEmail,
+    emailVerificationMailContent,
+    forgotPasswordMailContent
+} = require("../utils/mail");
 const crypto = require("node:crypto");
 
 const generateTokens = async (user) => {
@@ -159,7 +163,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
 const resendVerificationEmail = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
 
-    if(user.isEmailVerified) throw new ApiError(400, "User already verified");
+    if (user.isEmailVerified) throw new ApiError(400, "User already verified");
 
     const { unHashedToken, hashedToken, tokenExpiry } =
         await user.generateTemporaryToken();
@@ -167,7 +171,7 @@ const resendVerificationEmail = asyncHandler(async (req, res) => {
     user.emailVerificationToken = hashedToken;
     user.emailVerificationExpiry = tokenExpiry;
 
-    await user.save();
+    await user.save({ validateBeforeSave: false });
 
     await sendEmail({
         email: user?.email,
@@ -208,7 +212,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken: newRefreshToken } =
         await generateTokens(user);
 
-    await user.save();
+    await user.save({ validateBeforeSave: false });
 
     const options = {
         httpOnly: true,
@@ -228,6 +232,70 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         );
 });
 
+const resetPassword = asyncHandler(async (req, res) => {
+    const { resetToken } = req.params;
+    const { password, confirmPassword } = req.body;
+
+    if (!password || !confirmPassword || password !== confirmPassword)
+        throw new ApiError(
+            400,
+            "Password and confirm password required and both should be same"
+        );
+    if (!resetToken) throw new ApiError(400, "Reset token is required");
+
+    const hash = crypto
+        .createHmac("sha256", process.env.VERIFICATION_TOKEN_SECRET)
+        .update(resetToken)
+        .digest("hex");
+
+    const user = await User.findOne({
+        forgotPasswordToken: hash,
+        forgotPasswordExpiry: {
+            $gte: Date.now()
+        }
+    });
+
+    if (!user) throw new ApiError(400, "Invalid reset token");
+
+    user.forgotPasswordToken = "";
+    user.forgotPasswordExpiry = null;
+    user.password = password;
+
+    await user.save();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Password reset successfully"));
+});
+
+const requestFogotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    if (!email) throw new ApiError(400, "Email is required");
+
+    const user = await User.findOne({ email });
+    if (!user) throw new ApiError(400, "User doesn't exist");
+
+    const { unHashedToken, hashedToken, tokenExpiry } =
+        user.generateTemporaryToken();
+
+    user.forgotPasswordToken = hashedToken;
+    user.forgotPasswordExpiry = tokenExpiry;
+
+    await user.save({ validateBeforeSave: false });
+    await sendEmail({
+        email: user?.email,
+        subject: "Forgot password request",
+        mailContent: forgotPasswordMailContent(
+            user?.username,
+            process.env.FORGOT_PASSWORD_REDIRECT_URL + `/${unHashedToken}`
+        )
+    });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Forgot password email sent"));
+});
+
 module.exports = {
     register,
     login,
@@ -235,5 +303,7 @@ module.exports = {
     getCurrentUser,
     verifyEmail,
     refreshAccessToken,
-    resendVerificationEmail
+    resendVerificationEmail,
+    resetPassword,
+    requestFogotPassword
 };
