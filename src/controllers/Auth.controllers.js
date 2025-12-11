@@ -45,7 +45,6 @@ const register = asyncHandler(async (req, res) => {
 
     user.emailVerificationToken = hashedToken;
     user.emailVerificationExpiry = tokenExpiry;
-    console.log(unHashedToken);
 
     const savedUser = await user.save();
 
@@ -157,6 +156,33 @@ const verifyEmail = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, req.user, "Email verified successfully!"));
 });
 
+const resendVerificationEmail = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if(user.isEmailVerified) throw new ApiError(400, "User already verified");
+
+    const { unHashedToken, hashedToken, tokenExpiry } =
+        await user.generateTemporaryToken();
+
+    user.emailVerificationToken = hashedToken;
+    user.emailVerificationExpiry = tokenExpiry;
+
+    await user.save();
+
+    await sendEmail({
+        email: user?.email,
+        subject: "Please verify your email",
+        mailContent: emailVerificationMailContent(
+            user?.username,
+            `${req.protocol}://${req.get("host")}/api/v1/users/verify-email/${unHashedToken}`
+        )
+    });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Verification email sent successfully"));
+});
+
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const refreshToken = req.headers("refreshToken") || req.body.refreshToken;
     if (!refreshToken) throw new ApiError(400, "Refresh token is required");
@@ -183,17 +209,23 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         await generateTokens(user);
 
     await user.save();
-    
+
     const options = {
         httpOnly: true,
         secure: true
     };
 
-    return res 
+    return res
         .status(200)
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", newRefreshToken, options)
-        .json(new ApiResponse(200, {accessToken, refreshToken: newRefreshToken}, "Access token refreshed"));
+        .json(
+            new ApiResponse(
+                200,
+                { accessToken, refreshToken: newRefreshToken },
+                "Access token refreshed"
+            )
+        );
 });
 
 module.exports = {
@@ -202,5 +234,6 @@ module.exports = {
     logout,
     getCurrentUser,
     verifyEmail,
-    refreshAccessToken
+    refreshAccessToken,
+    resendVerificationEmail
 };

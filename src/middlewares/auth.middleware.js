@@ -18,7 +18,7 @@ const authenticateToken = asyncHandler(async (req, res, next) => {
 
     const user = await User.findById(decoded._id).select("-password -emailVerificationToken -emailVerificationExpiry -forgotPasswordToken -forgotPasswordExpiry -refreshToken");
 
-    if(!user) throw new ApiError(400, "User not authenticated");
+    if(!user) throw new ApiError(400, "Invalid token");
 
     req.user = user;
     next();
